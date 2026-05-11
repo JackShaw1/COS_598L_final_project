@@ -13,12 +13,12 @@ class PocketClassifier(nn.Module):
         super().__init__()
 
         # Convolutions
-        self.conv1 = nn.Conv1d(29, 16, kernel_size=1)
-        self.conv2 = nn.Conv1d(16, 64, kernel_size=1)
+        self.conv1 = nn.Conv1d(29, 64, kernel_size=1)
+        self.conv2 = nn.Conv1d(64, 256, kernel_size=1)
 
         # Fully connected layers
-        self.fc1 = nn.Linear(64, 32)
-        self.fc2 = nn.Linear(32, 1)
+        self.fc1 = nn.Linear(256, 64)
+        self.fc2 = nn.Linear(64, 1)
 
         # Dropout
         self.dropout = nn.Dropout(p=0.15)
