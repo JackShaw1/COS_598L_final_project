@@ -18,6 +18,6 @@ for file in os.listdir("define_imatinib_pockets/unique_imatinib_structures_apr15
                 if residue.get_resname() == "STI" and identity == False:
                     with open("train_classifier/training_files/positives.csv", "a", newline="") as outfile:
                         writer = csv.writer(outfile)
-                        writer.writerow([f"define_imatinib_pockets/unique_imatinib_structures_apr15_2026/{file}", chain.get_id(), residue.get_id()[1]])
+                        writer.writerow([f"../define_imatinib_pockets/unique_imatinib_structures_apr15_2026/{file}", chain.get_id(), residue.get_id()[1]])
                     identity = True
         break
