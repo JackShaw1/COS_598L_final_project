@@ -1,0 +1,22 @@
+- ATP
+- ADP
+- GTP
+- GDP
+- GLC
+    - lucose
+- NAD
+    - Nicotinamide adenine dinucleotide
+- NAP
+    - NADP(H)-type cofactor entry
+- FAD
+    - Flavin adenine dinucleotide
+- FMN
+    - Flavin mononucleotide
+- COA
+    - Coenzyme A
+- PYR
+    - Pyruvate
+- LAC
+    - Lactate
+- CIT
+    - Citrate
