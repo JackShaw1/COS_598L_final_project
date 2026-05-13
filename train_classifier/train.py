@@ -33,6 +33,7 @@ LEARNING_RATE = 0.0005
 N_FOLDS = 5
 POSITIVE_REPEAT = 10
 N_TRANSFORMS = 5
+NEGATIVE_RANKING_SAMPLES = 100
 RANDOM_SEED = 598
 
 # Helpers
@@ -141,6 +142,14 @@ def predict(model, loader, device):
 
     return torch.cat(all_labels).numpy(), torch.cat(all_probabilities).numpy()
 
+# Score samples for ranking experiment
+@torch.no_grad()
+def score_samples(model, samples, device):
+    dummy_labels = [0] * len(samples)
+    loader = make_loader(samples, dummy_labels, shuffle=False)
+    _, probabilities = predict(model, loader, device)
+    return np.ravel(probabilities)
+
 # Calculate performance metrics based on classifier probabilities
 def evaluate(model, loader, device):
     labels, probabilities = predict(model, loader, device)
@@ -175,6 +184,7 @@ def cross_validate(samples, labels, device):
     splitter = StratifiedKFold(n_splits=N_FOLDS, shuffle=True, random_state=RANDOM_SEED)
     results = []
     roc_data = []
+    ranking_data = []
 
     for fold, (train_indices, val_indices) in enumerate(splitter.split(samples, labels), start=1):
         print(f"\nFold {fold}/{N_FOLDS}")
@@ -200,7 +210,28 @@ def cross_validate(samples, labels, device):
         results.append((accuracy, auc))
         roc_data.append(predict(model, val_loader, device))
 
-    return results, roc_data
+        val_positive_samples = [samples[i] for i in val_indices if labels[i] == 1]
+
+        negative_indices = np.where(labels == 0)[0]
+        rng = np.random.default_rng(RANDOM_SEED + 1000 + fold)
+        if len(negative_indices) > NEGATIVE_RANKING_SAMPLES:
+            ranking_negative_indices = rng.choice(
+                negative_indices,
+                size=NEGATIVE_RANKING_SAMPLES,
+                replace=False
+            )
+        else:
+            ranking_negative_indices = negative_indices
+
+        ranking_negative_samples = [samples[i] for i in ranking_negative_indices]
+
+        positive_scores = score_samples(model, val_positive_samples, device)
+        negative_scores = score_samples(model, ranking_negative_samples, device)
+
+        print(f"ranking positives={len(positive_scores)} negatives={len(negative_scores)}")
+        ranking_data.append((positive_scores, negative_scores))
+
+    return results, roc_data, ranking_data
 
 # Print function for testing results
 def print_summary(results):
@@ -226,6 +257,68 @@ def plot_roc_curves(roc_data):
     fig.savefig(os.path.join(PROJECT_DIR, "roc_curves.png"), dpi=150)
     plt.close(fig)
 
+# Create ranking experiment results output
+def plot_ranking_experiments(ranking_data):
+    for fold, (positive_scores, negative_scores) in enumerate(ranking_data, start=1):
+        sorted_negative_scores = np.sort(negative_scores)[::-1]
+        negative_ranks = np.arange(1, len(sorted_negative_scores) + 1)
+
+        fig, ax = plt.subplots(figsize=(7, 4))
+
+        ax.plot(
+            negative_ranks,
+            sorted_negative_scores,
+            marker="o",
+            markersize=3,
+            linewidth=1,
+            label="Negative controls"
+        )
+
+        positive_ranks = [1 + np.sum(negative_scores > positive_score) for positive_score in positive_scores]
+        rank_to_indices = {}
+        for i, positive_rank in enumerate(positive_ranks):
+            if positive_rank not in rank_to_indices:
+                rank_to_indices[positive_rank] = []
+            rank_to_indices[positive_rank].append(i)
+
+        x_offsets = np.zeros(len(positive_scores))
+        for positive_rank, indices in rank_to_indices.items():
+            if len(indices) == 1:
+                x_offsets[indices[0]] = 0.0
+            else:
+                offsets = np.linspace(-1.0, 1.0, len(indices))
+                for idx, offset in zip(indices, offsets):
+                    x_offsets[idx] = offset
+
+        for i, positive_score in enumerate(positive_scores, start=1):
+            positive_rank = positive_ranks[i - 1]
+            x_pos = positive_rank + x_offsets[i - 1]
+            ax.scatter(
+                x_pos,
+                positive_score,
+                s=180,
+                marker="*",
+                edgecolors="black",
+                linewidths=1.0,
+                zorder=5
+            )
+            ax.text(
+                x_pos + 0.6,
+                positive_score,
+                f"P{i}",
+                fontsize=8,
+                va="center",
+                ha="left"
+            )
+
+        ax.set_xlabel("Rank among negative controls")
+        ax.set_ylabel("Classifier probability")
+        ax.set_title(f"Fold {fold} ranking experiment")
+        ax.legend(fontsize=8)
+        fig.tight_layout()
+        fig.savefig(os.path.join(PROJECT_DIR, f"ranking_experiment_fold_{fold}.png"), dpi=150)
+        plt.close(fig)
+
 if __name__ == "__main__":
     torch.manual_seed(RANDOM_SEED)
     np.random.seed(RANDOM_SEED)
@@ -236,9 +329,10 @@ if __name__ == "__main__":
 
     samples, labels = load_training_data()
 
-    results, roc_data = cross_validate(samples, labels, device)
+    results, roc_data, ranking_data = cross_validate(samples, labels, device)
     print_summary(results)
     plot_roc_curves(roc_data)
+    plot_ranking_experiments(ranking_data)
 
     # Train final model on entirety of training data.
     # We used this model for subsequent searching throughout the human proteome (AlphaFold Database) for potential Imatinib binding pockets.
