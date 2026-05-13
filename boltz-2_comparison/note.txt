@@ -1,0 +1,2 @@
+The proteins in prots.csv were randomly selected from the AlphaFold Database's human proteome.
+Each of these proteins had at least one candidate Imatinib binding pocket w/ a score over 0.5.
